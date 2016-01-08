@@ -64,6 +64,9 @@ In both cases the options are:
   --batchSize, -b
      maximal number of events to replicate at once
      Default: 512
+  --eventFormat, -e
+     format string for the event
+     Default: %(localSequenceNr)s %(systemTimestamp)tFT%(systemTimestamp)tT.%(systemTimestamp)tL %(this)s
   --fromSeqNo, -f
      from sequence number
      Default: 0

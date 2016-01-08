@@ -1,7 +1,5 @@
 package com.github.volkerstampa.eventuate
 
-import java.time.Instant
-
 import akka.actor.ActorPath
 import akka.actor.ActorSelection
 import akka.actor.ActorSystem
@@ -29,6 +27,7 @@ import scala.collection.JavaConverters.mapAsJavaMapConverter
 import akka.pattern.ask
 
 import scala.util.Try
+import scala.util.control.Exception.handling
 
 object SimpleLogViewer extends App {
 
@@ -52,10 +51,10 @@ object SimpleLogViewer extends App {
     ReplicationConnection(remoteHost, remotePort, remoteSystemName),
     "acceptor"))
 
+  val eventFormatter = new CaseClassFormatter[DurableEvent](eventFormatString)
+
   replicateEventsAndDo(acceptor, logName, fromSequenceNo, maxEvents, batchSize)
-    { event =>
-      println(s"${event.localSequenceNr} ${Instant.ofEpochMilli(event.systemTimestamp)}: $event")
-    }
+    { event => println(eventFormatter.format(event)) }
     { _.printStackTrace() }
     { system.terminate() }
 
@@ -80,7 +79,7 @@ object SimpleLogViewer extends App {
 
     def handleResponse(replicationCnt: Long): PartialFunction[Try[Any], Unit] = {
       case Success(ReplicationReadSuccess(events, progresss, _, _)) =>
-        events.foreach(handleEvent)
+        handling(classOf[Exception]).by(handleFailure.andThen(_ => terminate))(events.foreach(handleEvent))
         val newReplicationCnt = replicationCnt + events.size
         if (newReplicationCnt < maxEvents && events.nonEmpty)
           replicate(progresss + 1, newReplicationCnt)
@@ -172,6 +171,12 @@ object SimpleLogViewer extends App {
       description = "maximal number of events to replicate at once"
     )
     var batchSize: Int = config.getInt("eventuate.log.write-batch-size")
+
+    @Parameter(
+      names = Array("--eventFormat", "-e"),
+      description = "format string for the event"
+    )
+    var eventFormatString = "%(localSequenceNr)s %(systemTimestamp)tFT%(systemTimestamp)tT.%(systemTimestamp)tL %(this)s"
   }
 
   private def parseCommandLineArgs(args: Array[String]): LogViewerParameters = {
